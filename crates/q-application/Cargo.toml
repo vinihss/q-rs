@@ -1,0 +1,15 @@
+[package]
+name = "q-application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+q-core.workspace = true
+async-trait.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+q-tools.workspace = true

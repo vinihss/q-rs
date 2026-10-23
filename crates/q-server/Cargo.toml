@@ -1,0 +1,14 @@
+[package]
+name = "q-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+q-core.workspace = true
+q-application.workspace = true
+axum.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures-util.workspace = true
