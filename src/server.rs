@@ -144,8 +144,10 @@ pub fn app() -> Router {
         .route("/v1/chat/completions", post(chat))
 }
 
-pub async fn run(port: u16) {
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+pub async fn run(bind: &str, port: u16) {
+    let addr: std::net::SocketAddr = format!("{bind}:{port}")
+        .parse()
+        .unwrap_or_else(|_| panic!("endereço inválido: {bind}:{port}"));
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
     eprintln!("q-rs serve em http://{addr}  (POST /v1/ask · POST /v1/chat/completions · GET /v1/models · GET /health)");
     axum::serve(listener, app()).await.expect("serve");

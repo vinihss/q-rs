@@ -47,7 +47,10 @@ System prompt = base fixa (português, curto e direto) + `~/.config/q/instructio
 ## Servidor HTTP
 
 ```bash
-q-rs serve              # porta 8787 (ou Q_PORT / --port N)
+q-rs serve                          # 127.0.0.1:8787 (só local)
+q-rs serve --bind 0.0.0.0           # expõe na LAN/Tailscale (atenção: sem auth)
+q-rs serve --port 9000 --bind IP    # porta/endereço customizados
+# Q_PORT e Q_BIND (env) sobrepõem os defaults
 ```
 
 | Rota | Descrição |
@@ -95,6 +98,19 @@ Detalhes:
 - **`model`** aceita `groq/<id>`, `openrouter/<id>`, ou omite pra usar o default (`groq/openai/gpt-oss-20b`). Se o modelo falhar (429/erro), cai automaticamente na cadeia de fallback.
 - Campos extras (`temperature`, `max_tokens`, `reasoning_effort`, tools) são encaminhados como estão.
 - O `/v1/chat/completions` repassa o stream cru do upstream — funciona com qualquer cliente OpenAI-compatível apontando `baseURL` pra `http://127.0.0.1:8787/v1`.
+
+### Acesso remoto (VPN/Tailscale)
+
+Com o serviço em `--bind 0.0.0.0`, qualquer device do tailnet chama o IP Tailscale da máquina:
+
+```bash
+# de outro device (ex.: hostinger, iPhone) — IP Tailscale do servidor:
+curl -N -X POST http://100.95.254.27:8787/v1/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"q": "Capital da Austrália?"}'
+```
+
+O endpoint não tem autenticação — quem estiver na mesma rede/tailnet usa a cota do seu Groq/OpenRouter. Pra restringir ao Tailscale use `--bind <ip-do-tailscale>` em vez de `0.0.0.0`.
 
 ## Como provider do OpenCode
 
