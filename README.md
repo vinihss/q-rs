@@ -2,57 +2,110 @@
 
 Pergunta rápida em Rust: CLI com streaming token-a-token e servidor HTTP compatível com a API da OpenAI (funciona como provider do OpenCode).
 
-- **Grátis**: Groq (free tier) com fallback automático pro OpenRouter (`:free`)
-- **Rápido**: mediana de ~0,56s do CLI até o primeiro token; ~0,37s warm via HTTP keep-alive
-- **Streaming**: resposta aparece conforme os tokens chegam
-- **Fallback automático**: se o modelo principal falhar (429, erro), tenta a cadeia na ordem
+**Site:** https://github.com/vinihss/q-rs  
+**Binário:** `~/.local/bin/q-rs` (~3,8 MB)
 
-## Instalação
+---
+
+## 📦 Instalação
 
 ```bash
+# Via script (recomendado)
+bash /home/vinicius/q-rs/install.sh
+
+# Ou manual:
 git clone https://github.com/vinihss/q-rs.git
 cd q-rs
 cargo build --release
 cp target/release/q-rs ~/.local/bin/
 ```
 
-Chaves no ambiente (o `q-rs` só lê de env, nunca de arquivo de config):
+### Chaves de API (ambiente do serviço)
+O `q-rs` lê as chaves das variáveis de ambiente `GROQ_API_KEY` e `OPENROUTER_API_KEY`.  
+Coloque-as no arquivo `~/.config/q/env` (formato `VAR=valor`, permissions 600) para o serviço systemd usar.
+
+---
+
+## 🚀 CLI (Linha de Comando)
 
 ```bash
-export GROQ_API_KEY="gsk_..."
-export OPENROUTER_API_KEY="sk-or-..."
-```
-
-## CLI
-
-```bash
-# pergunta direta
+# Pergunta direta (usa modelo default + fallback automático)
 q-rs "Capital da Austrália?"
 
-# modelo específico (groq/<id> ou openrouter/<id>)
+# Com modelo específico
 q-rs -m openrouter/recursive/flint-v1.0:free "quem é você?"
 
-# via stdin (pipeline)
+# Habilidades (skills)
+q-rs -s tradutor "Hello world"
+q-rs -s resumir "Texto longo para resumir..."
+q-rs -s corretor "voce foi ao mercado"
+q-rs -s auxiliar "organizar festa"
+q-rs -s traduzir "How are you?"
+q-rs -s revisor "seu código aqui"
+
+# Via stdin (pipeline)
 echo "qual a raiz de 144?" | q-rs
 
-# interativo (sem argumento, em terminal)
+# Interativo (sem argumento, em terminal)
 q-rs
 
-# ajuda
+# Listar skills disponíveis
+q-rs skills
+
+# Tool: executar comando shell (limitado e seguro)
+q-rs tool shell "echo ola"
+q-rs tool shell "pwd"
+
+# Modelo específico via argumento
+q-rs -m groq/qwen/qwen3.8-27b "modelo específico"
+
+# Ajuda
 q-rs -h
 ```
 
-System prompt = base fixa (português, curto e direto) + `~/.config/q/instructions.md` (sobrescreva o caminho com `Q_INSTRUCTIONS`).
+### Flags CLI
+| Flag | Descrição |
+|------|-----------|
+| `-m --model` | Modelo a usar (ex: `groq/openai/gpt-oss-20b`) |
+| `-s --skill` | Habilidade a usar (veja `q-rs skills`) |
+| `-h --help` | Mostra ajuda |
 
-## Servidor HTTP
+---
+
+## 🛠️ Tools (ferramentas limitadas e seguras)
+
+O q-rs inclui tools restritas para execução de comandos e leitura de arquivos.
 
 ```bash
-q-rs serve              # porta 8787 (ou Q_PORT / --port N)
+# Executar comando shell (bloqueia pipes, redirecionamento, operadores perigosos)
+q-rs tool shell "echo ola mundo"
+
+# Ler arquivo relativo ao projeto
+q-rs tool fs_read --path Cargo.toml
+
+# Lista de tools disponíveis
+q-rs tool list
+```
+
+**Segurança:**
+- Comandos com `|`, `>`, `<`, `&&`, `||` são bloqueados
+- Máximo 100 caracteres por comando
+- Apenas `shell` e `fs_read` estão disponíveis
+- Caminhos de arquivo devem ser relativos ao projeto
+
+---
+
+## 🌐 Servidor HTTP (`q-rs serve`)
+
+```bash
+q-rs serve              # 127.0.0.1:8787 (só local)
+q-rs serve --bind 0.0.0.0  # expõe na LAN/Tailscale (seu IP: 100.95.254.27)
 ```
 
 | Rota | Descrição |
-| --- | --- |
-| `POST /v1/ask` | Q&A curto: `{"q": "...", "model": "groq/..."}` → SSE |
+|------|-----------|
+| `GET /` | `?q=...` (+ `model=` opcional) → resposta em **text/plain** |
+| `POST /v1/ask` | `{"q": "...", "format": "text"?}` → SSE (default) ou **text/plain** |
 | `POST /v1/chat/completions` | Compatível com a API da OpenAI (streaming e não-streaming) |
 | `GET /v1/models` | Catálogo de modelos |
 | `GET /health` | Saúde |
@@ -60,46 +113,113 @@ q-rs serve              # porta 8787 (ou Q_PORT / --port N)
 ### Exemplos de chamada
 
 ```bash
+# plain text — uma linha, sem SSE (funciona até no navegador/Atalhos)
+curl "http://100.95.254.27:8787/?q=Capital+da+Austrália"
+# → Canberra.   [text/plain; charset=utf-8]
+
+# plain text via POST
+curl -s -X POST http://127.0.0.1:8787/v1/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"q": "Capital da Austrália?", "format": "text"}'
+
 # /v1/ask — SSE token-a-token (eventos "data: <delta>")
 curl -N -X POST http://127.0.0.1:8787/v1/ask \
   -H 'Content-Type: application/json' \
   -d '{"q": "Capital da Austrália?"}'
 
-# /v1/ask com modelo específico
-curl -N -X POST http://127.0.0.1:8787/v1/ask \
-  -H 'Content-Type: application/json' \
-  -d '{"q": "quem é você?", "model": "groq/qwen/qwen3.8-27b"}'
-
 # /v1/chat/completions — compatível com a API da OpenAI (streaming)
 curl -N -X POST http://127.0.0.1:8787/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{
-    "model": "groq/openai/gpt-oss-20b",
-    "stream": true,
-    "messages": [{"role": "user", "content": "say OK only"}]
-  }'
+  -d '{"model": "groq/openai/gpt-oss-20b", "stream": true,
+       "messages": [{"role": "user", "content": "oi"}]}'
 
-# idem, sem streaming (resposta JSON única)
-curl -s -X POST http://127.0.0.1:8787/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{"model": "groq/openai/gpt-oss-20b", "stream": false,
-       "messages": [{"role": "user", "content": "say OK only"}]}'
-
-# catálogo de modelos / saúde
+# Catálogo de modelos
 curl http://127.0.0.1:8787/v1/models
+
+# Saúde
 curl http://127.0.0.1:8787/health
 ```
 
-Detalhes:
+### Acesso remoto (VPN/Tailscale)
 
-- **`model`** aceita `groq/<id>`, `openrouter/<id>`, ou omite pra usar o default (`groq/openai/gpt-oss-20b`). Se o modelo falhar (429/erro), cai automaticamente na cadeia de fallback.
-- Campos extras (`temperature`, `max_tokens`, `reasoning_effort`, tools) são encaminhados como estão.
-- O `/v1/chat/completions` repassa o stream cru do upstream — funciona com qualquer cliente OpenAI-compatível apontando `baseURL` pra `http://127.0.0.1:8787/v1`.
+Com o serviço em `--bind 0.0.0.0`, qualquer device do tailnet chama o IP Tailscale da máquina:
 
-## Como provider do OpenCode
+```bash
+# De outro device (ex.: hostinger, iPhone) — IP Tailscale do servidor:
+curl "http://100.95.254.27:8787/?q=Capital+da+Austrália"
+```
+
+**⚠️ Atenção:** o endpoint não tem autenticação — quem estiver na mesma rede/tailnet usa a cota do seu Groq/OpenRouter.
+
+---
+
+## 🧠 Skills (system prompt personalizável)
+
+Skills são arquivos `~/.config/q/skills/<nome>.md` que adicionam instruções ao system prompt. O q-rs já vem com 6 skills padrão:
+
+| Skill | Entrada | Saída |
+|-------|---------|-------|
+| **tradutor** | "Hello world" | "Olá mundo." |
+| **resumir** | Texto longo | Resumo claro (até 150 palavras) |
+| **corretor** | "voce foi ao mercado" | Texto corrigido |
+| **revisor** | Código Rust | Análise de bugs e melhorias |
+| **traduzir** | "How are you?" | "Como vai?" |
+| **auxiliar** | "festa de 10 pessoas" | Plano com 10 itens |
+
+### Como usar:
+
+```bash
+q-rs -s tradutor "texto para traduzir"
+q-rs -s resumir "Seu texto longo aqui"
+q-rs -s corretor "texto com erros"
+q-rs -s auxiliar "sua tarefa aqui"
+q-rs -s traduzir "texto em inglês"
+q-rs -s revisor "seu código aqui"
+
+# Via API:
+curl "http://100.95.254.27:8787/?q=texto&skill=tradutor"
+
+# Listar:
+q-rs skills
+```
+
+### Como criar sua própria skill:
+Coloque um arquivo `~/.config/q/skills/<nome>.md` com o seguinte formato (padrão OpenCode/claude):
+
+```markdown
+# Nome da Skill
+
+Instruções para o modelo.
+
+## Exemplos
+
+### Entrada
+Texto de exemplo.
+
+### Saída
+Resposta esperada.
+```
+```
+
+---
+
+## 🔄 Fallback automático
+
+Em todos os caminhos, se o modelo principal falhar (429, erro), a cadeia segue:
+
+1. `groq/openai/gpt-oss-20b` (default; `reasoning_effort: low` no Groq)
+2. `groq/qwen/qwen3.8-27b`
+3. `openrouter/recursive/flint-v1.0:free`
+4. `openrouter/google/gemma-4-31b-it:free`
+5. `openrouter/nvidia/nemotron-3.5-lightning:free`
+
+---
+
+## 🤖 Provider do OpenCode
+
+Adicione ao seu `~/.config/opencode/opencode.jsonc`:
 
 ```jsonc
-// ~/.config/opencode/opencode.jsonc
 {
   "providers": {
     "q": {
@@ -120,37 +240,13 @@ Detalhes:
 
 Uso: `opencode run -m q/fast "sua pergunta"`.
 
-Com systemd user (sobe no boot e se reinicia sozinho):
+---
 
-```ini
-# ~/.config/systemd/user/q-rs-serve.service
-[Unit]
-Description=q-rs serve
-After=network-online.target
-
-[Service]
-ExecStart=%h/.local/bin/q-rs serve --port 8787
-EnvironmentFile=%h/.config/q/env   # GROQ_API_KEY=... / OPENROUTER_API_KEY=...
-Restart=on-failure
-RestartSec=2
-
-[Install]
-WantedBy=default.target
-```
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now q-rs-serve
-```
-
-## Cadeia de fallback
-
-1. `groq/openai/gpt-oss-20b` (default; `reasoning_effort: low` no Groq)
-2. `groq/qwen/qwen3.8-27b`
-3. `openrouter/recursive/flint-v1.0:free`
-4. `openrouter/google/gemma-4-31b-it:free`
-5. `openrouter/nvidia/nemotron-3.5-lightning:free`
-
-## Licença
+## 📄 Licença
 
 MIT
+
+---
+
+**GitHub:** https://github.com/vinihss/q-rs  
+**Documentação:** https://github.com/vinihss/q-rs/blob/main/README.md
