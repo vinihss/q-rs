@@ -55,7 +55,8 @@ q-rs serve --port 9000 --bind IP    # porta/endereço customizados
 
 | Rota | Descrição |
 | --- | --- |
-| `POST /v1/ask` | Q&A curto: `{"q": "...", "model": "groq/..."}` → SSE |
+| `GET /` | `?q=...` (+ `model=` opcional) → resposta completa em `text/plain` |
+| `POST /v1/ask` | `{"q": "...", "model": "groq/...", "format": "text"?}` → SSE (default) ou `text/plain` |
 | `POST /v1/chat/completions` | Compatível com a API da OpenAI (streaming e não-streaming) |
 | `GET /v1/models` | Catálogo de modelos |
 | `GET /health` | Saúde |
@@ -63,15 +64,19 @@ q-rs serve --port 9000 --bind IP    # porta/endereço customizados
 ### Exemplos de chamada
 
 ```bash
+# plain text — uma linha, sem SSE (funciona até no navegador/Atalhos)
+curl "http://127.0.0.1:8787/?q=Capital+da+Austrália"
+curl "http://127.0.0.1:8787/?q=quem+é+você&model=groq/qwen/qwen3.8-27b"
+
+# plain text via POST
+curl -s -X POST http://127.0.0.1:8787/v1/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"q": "Capital da Austrália?", "format": "text"}'
+
 # /v1/ask — SSE token-a-token (eventos "data: <delta>")
 curl -N -X POST http://127.0.0.1:8787/v1/ask \
   -H 'Content-Type: application/json' \
   -d '{"q": "Capital da Austrália?"}'
-
-# /v1/ask com modelo específico
-curl -N -X POST http://127.0.0.1:8787/v1/ask \
-  -H 'Content-Type: application/json' \
-  -d '{"q": "quem é você?", "model": "groq/qwen/qwen3.8-27b"}'
 
 # /v1/chat/completions — compatível com a API da OpenAI (streaming)
 curl -N -X POST http://127.0.0.1:8787/v1/chat/completions \
@@ -105,9 +110,7 @@ Com o serviço em `--bind 0.0.0.0`, qualquer device do tailnet chama o IP Tailsc
 
 ```bash
 # de outro device (ex.: hostinger, iPhone) — IP Tailscale do servidor:
-curl -N -X POST http://100.95.254.27:8787/v1/ask \
-  -H 'Content-Type: application/json' \
-  -d '{"q": "Capital da Austrália?"}'
+curl "http://100.95.254.27:8787/?q=Capital+da+Austrália"
 ```
 
 O endpoint não tem autenticação — quem estiver na mesma rede/tailnet usa a cota do seu Groq/OpenRouter. Pra restringir ao Tailscale use `--bind <ip-do-tailscale>` em vez de `0.0.0.0`.
@@ -145,7 +148,7 @@ Description=q-rs serve
 After=network-online.target
 
 [Service]
-ExecStart=%h/.local/bin/q-rs serve --port 8787
+ExecStart=%h/.local/bin/q-rs serve --port 8787 --bind 0.0.0.0
 EnvironmentFile=%h/.config/q/env   # GROQ_API_KEY=... / OPENROUTER_API_KEY=...
 Restart=on-failure
 RestartSec=2

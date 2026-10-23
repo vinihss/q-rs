@@ -18,7 +18,8 @@ Uso: q-rs [-m provider/modelo] [pergunta...]
                                          expõe na LAN/Tailscale — sem auth)
 
 Endpoint:
-  POST /v1/ask               {\"q\":\"...\",\"model\":\"groq/...\"} → SSE
+  GET  /?q=...               resposta completa em text/plain
+  POST /v1/ask               {\"q\":\"...\",\"model\":\"groq/...\",\"format\":\"text\"?} → SSE ou text/plain
   POST /v1/chat/completions  compatível OpenAI (usado como provider do OpenCode)
   GET  /v1/models            catálogo
   GET  /health
