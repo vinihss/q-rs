@@ -13,13 +13,10 @@ const HELP: &str = "q-rs — pergunta rápida (streaming, API direta)
 Uso: q-rs [-m provider/modelo] [pergunta...]
      q-rs                       prompt interativo
      echo \"pergunta\" | q-rs     lê do stdin
-     q-rs serve [--port N] [--bind IP]   endpoint HTTP (default 127.0.0.1:8787;
-                                         Q_PORT/Q_BIND sobrepõem; --bind 0.0.0.0
-                                         expõe na LAN/Tailscale — sem auth)
+     q-rs serve [--port N]      endpoint HTTP (default 8787)
 
 Endpoint:
-  GET  /?q=...               resposta completa em text/plain
-  POST /v1/ask               {\"q\":\"...\",\"model\":\"groq/...\",\"format\":\"text\"?} → SSE ou text/plain
+  POST /v1/ask               {\"q\":\"...\",\"model\":\"groq/...\"} → SSE
   POST /v1/chat/completions  compatível OpenAI (usado como provider do OpenCode)
   GET  /v1/models            catálogo
   GET  /health
@@ -120,7 +117,6 @@ async fn main() {
 
     if args.first().map(String::as_str) == Some("serve") {
         let mut port: u16 = std::env::var("Q_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8787);
-        let mut bind = std::env::var("Q_BIND").unwrap_or_else(|_| "127.0.0.1".to_string());
         let mut i = 1;
         while i < args.len() {
             match args[i].as_str() {
@@ -134,20 +130,13 @@ async fn main() {
                         });
                     i += 2;
                 }
-                "--bind" | "-b" => {
-                    bind = args.get(i + 1).cloned().unwrap_or_else(|| {
-                        eprintln!("q-rs: --bind exige um endereço (ex.: 0.0.0.0)");
-                        std::process::exit(2);
-                    });
-                    i += 2;
-                }
                 other => {
                     eprintln!("q-rs: opção desconhecida no serve: {other}");
                     std::process::exit(2);
                 }
             }
         }
-        server::run(&bind, port).await;
+        server::run(port).await;
         return;
     }
 

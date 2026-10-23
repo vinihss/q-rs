@@ -47,16 +47,12 @@ System prompt = base fixa (português, curto e direto) + `~/.config/q/instructio
 ## Servidor HTTP
 
 ```bash
-q-rs serve                          # 127.0.0.1:8787 (só local)
-q-rs serve --bind 0.0.0.0           # expõe na LAN/Tailscale (atenção: sem auth)
-q-rs serve --port 9000 --bind IP    # porta/endereço customizados
-# Q_PORT e Q_BIND (env) sobrepõem os defaults
+q-rs serve              # porta 8787 (ou Q_PORT / --port N)
 ```
 
 | Rota | Descrição |
 | --- | --- |
-| `GET /` | `?q=...` (+ `model=` opcional) → resposta completa em `text/plain` |
-| `POST /v1/ask` | `{"q": "...", "model": "groq/...", "format": "text"?}` → SSE (default) ou `text/plain` |
+| `POST /v1/ask` | Q&A curto: `{"q": "...", "model": "groq/..."}` → SSE |
 | `POST /v1/chat/completions` | Compatível com a API da OpenAI (streaming e não-streaming) |
 | `GET /v1/models` | Catálogo de modelos |
 | `GET /health` | Saúde |
@@ -64,19 +60,15 @@ q-rs serve --port 9000 --bind IP    # porta/endereço customizados
 ### Exemplos de chamada
 
 ```bash
-# plain text — uma linha, sem SSE (funciona até no navegador/Atalhos)
-curl "http://127.0.0.1:8787/?q=Capital+da+Austrália"
-curl "http://127.0.0.1:8787/?q=quem+é+você&model=groq/qwen/qwen3.8-27b"
-
-# plain text via POST
-curl -s -X POST http://127.0.0.1:8787/v1/ask \
-  -H 'Content-Type: application/json' \
-  -d '{"q": "Capital da Austrália?", "format": "text"}'
-
 # /v1/ask — SSE token-a-token (eventos "data: <delta>")
 curl -N -X POST http://127.0.0.1:8787/v1/ask \
   -H 'Content-Type: application/json' \
   -d '{"q": "Capital da Austrália?"}'
+
+# /v1/ask com modelo específico
+curl -N -X POST http://127.0.0.1:8787/v1/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"q": "quem é você?", "model": "groq/qwen/qwen3.8-27b"}'
 
 # /v1/chat/completions — compatível com a API da OpenAI (streaming)
 curl -N -X POST http://127.0.0.1:8787/v1/chat/completions \
@@ -103,17 +95,6 @@ Detalhes:
 - **`model`** aceita `groq/<id>`, `openrouter/<id>`, ou omite pra usar o default (`groq/openai/gpt-oss-20b`). Se o modelo falhar (429/erro), cai automaticamente na cadeia de fallback.
 - Campos extras (`temperature`, `max_tokens`, `reasoning_effort`, tools) são encaminhados como estão.
 - O `/v1/chat/completions` repassa o stream cru do upstream — funciona com qualquer cliente OpenAI-compatível apontando `baseURL` pra `http://127.0.0.1:8787/v1`.
-
-### Acesso remoto (VPN/Tailscale)
-
-Com o serviço em `--bind 0.0.0.0`, qualquer device do tailnet chama o IP Tailscale da máquina:
-
-```bash
-# de outro device (ex.: hostinger, iPhone) — IP Tailscale do servidor:
-curl "http://100.95.254.27:8787/?q=Capital+da+Austrália"
-```
-
-O endpoint não tem autenticação — quem estiver na mesma rede/tailnet usa a cota do seu Groq/OpenRouter. Pra restringir ao Tailscale use `--bind <ip-do-tailscale>` em vez de `0.0.0.0`.
 
 ## Como provider do OpenCode
 
@@ -148,7 +129,7 @@ Description=q-rs serve
 After=network-online.target
 
 [Service]
-ExecStart=%h/.local/bin/q-rs serve --port 8787 --bind 0.0.0.0
+ExecStart=%h/.local/bin/q-rs serve --port 8787
 EnvironmentFile=%h/.config/q/env   # GROQ_API_KEY=... / OPENROUTER_API_KEY=...
 Restart=on-failure
 RestartSec=2
