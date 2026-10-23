@@ -1,24 +1,28 @@
-[package]
-name = "q-rs"
+[workspace]
+resolver = "2"
+members = [
+    "crates/q-core",
+    "crates/q-application",
+    "crates/q-providers",
+    "crates/q-server",
+    "crates/q-cli",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
-[[bin]]
-name = "q-rs"
-path = "src/main.rs"
-
-[dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "io-std", "fs", "net", "signal"] }
-reqwest = { version = "0.12", default-features = false, features = ["stream", "json", "rustls-tls"] }
+[workspace.dependencies]
+async-trait = "0.1"
+thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-futures-util = "0.3"
-async-stream = "0.3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 axum = "0.8"
-bytes = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
-[profile.release]
-opt-level = 3
-lto = "thin"
-strip = true
-panic = "abort"
+q-core = { path = "crates/q-core" }
+q-application = { path = "crates/q-application" }
+q-providers = { path = "crates/q-providers" }
+q-server = { path = "crates/q-server" }
