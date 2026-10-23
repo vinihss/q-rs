@@ -34,7 +34,7 @@ mkdir -p "${Q_CONF}"
 mkdir -p "${Q_SYSTEMD}"
 
 # 3. Instalar binário (se não existir ou rebuild)
-if [ "${BINARY_EXISTS}" = false ] || [ "$1" = "--force" ]; then
+if [ "${BINARY_EXISTS}" = false ]; then
     echo "🔨 Construindo q-rs..."
     cd "${Q_PROJECT}"
     cargo build --release 2>&1 | tail -1
@@ -42,14 +42,13 @@ if [ "${BINARY_EXISTS}" = false ] || [ "$1" = "--force" ]; then
     chmod +x "${Q_BIN}/q-rs"
     echo "✅ Binário instalado: ${Q_BIN}/q-rs"
 else
-    echo "✅ Binário já existe (use --force para rebuild)"
+    echo "✅ Binário já existe"
 fi
 
 # 4. Instalar skills (se não existirem)
 echo "🛠️  Instalando skills..."
 for skill in tradutor resumir corretor revisor traduzir auxiliar; do
     if [ ! -f "${Q_SKILLS}/${skill}.md" ]; then
-        # Cria skill básica se não existir
         case "${skill}" in
             tradutor)
                 cat > "${Q_SKILLS}/${skill}.md" << 'EOF'
@@ -124,9 +123,9 @@ Ajuda com tarefas cotidianas, brainstorming e organização.
 EOF
                 ;;
         esac
-        echo "   ✅ Skill '${skill}' criada"
+        echo "✅ Skill '${skill}' criada"
     else
-        echo "   ✅ Skill '${skill}' já existe"
+        echo "✅ Skill '${skill}' já existe"
     fi
 done
 
@@ -142,7 +141,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${Q_BIN}/q-rs serve --port 8787 --bind 0.0.0.0
+ExecStart=${Q_BIN}/q-rs serve --port 8787
 EnvironmentFile=${Q_CONF}/env
 Restart=on-failure
 RestartSec=2
@@ -150,9 +149,9 @@ RestartSec=2
 [Install]
 WantedBy=default.target
 EOF
-    echo "   ✅ Service file criado: ${Q_SYSTEMD}/q-rs-serve.service"
+    echo "✅ Service file criado: ${Q_SYSTEMD}/q-rs-serve.service"
 else
-    echo "   ✅ Service file já existe"
+    echo "✅ Service file já existe"
 fi
 
 # 6. Habilitar service no boot
@@ -164,6 +163,10 @@ systemctl --user enable --now q-rs-serve.service 2>/dev/null || echo "   (inicia
 echo "🔑 Verificando ambiente de chaves..."
 if [ -f "${Q_CONF}/env" ]; then
     echo "   ✅ Arquivo de chaves existe: ${Q_CONF}/env"
+    # Exportar variáveis de ambiente do arquivo env
+    set -a
+    source "${Q_CONF}/env"
+    set +a
     head -2 "${Q_CONF}/env" 2>/dev/null || echo "   (arquivo vazio)"
 else
     echo "⚠️  Arquivo de chaves não encontrado: ${Q_CONF}/env"
@@ -186,11 +189,11 @@ for s in tradutor resumir corretor revisor traduzir auxiliar; do
     fi
 done
 echo ""
-echo "� Comandos úteis:"
+echo "📦 Comandos úteis:"
 echo "   q-rs <pergunta>                     # Pergunta direta"
-echo "   q-rs -s tradutor \"texto\"            # Usar skill"
-echo "   q-rs tool shell \"comando\"           # Executar tool shell"
-echo "   q-rs skills                         # Listar skills"
+echo "   q-rs -s tradutor \"texto\"              # Usar skill"
+echo "   q-rs tool shell \"comando\"             # Executar tool shell"
+echo "   q-rs skills                           # Listar skills"
 echo "   systemctl --user status q-rs-serve  # Status do serviço"
 echo ""
 echo "=== Pronto! ==="
