@@ -61,6 +61,8 @@ pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<Message>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
@@ -79,11 +81,16 @@ impl ChatRequest {
         Self {
             model: model.into(),
             messages,
+            system_prompt: None,
             temperature: None,
             max_tokens: None,
             stream: false,
             tools: None,
         }
+    }
+    pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.system_prompt = Some(prompt.into());
+        self
     }
     pub fn validate(&self) -> crate::Result<()> {
         if self.messages.is_empty() {

@@ -11,7 +11,7 @@ use axum::{
 };
 use futures_util::StreamExt;
 use q_application::ChatService;
-use q_core::{ChatRequest, Message, StreamEvent};
+use q_core::{ChatRequest, Message};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -36,7 +36,8 @@ pub async fn ask(State(state): State<AppState>, Json(body): Json<AskRequest>) ->
         )
             .into_response();
     }
-    let request = ChatRequest::new(body.model, vec![Message::user(body.q)]);
+    let mut request = ChatRequest::new(body.model, vec![Message::user(body.q)]);
+    request.system_prompt = body.system_prompt;
     match state.chat.complete(&request).await {
         Ok(answer) => Json(json!({"model":answer.model,"answer":answer.content})).into_response(),
         Err(error) => map_error(error),

@@ -63,6 +63,16 @@ impl ChatService {
         // A model may request multiple tool calls in one assistant turn. Execute them and
         // append each result as a tool message, then ask the model to continue.
         let mut working = request.clone();
+        if let Some(prompt) = &working.system_prompt {
+            working.messages.insert(0, q_core::Message {
+                role: Role::System,
+                content: prompt.clone(),
+                name: None,
+                tool_call_id: None,
+                tool_calls: None,
+            });
+        }
+        working.system_prompt = None;
         working.tools = self.tools.as_ref().map(|executor| executor.definitions());
         let mut rounds = 0usize;
 
@@ -142,9 +152,20 @@ impl ChatService {
         if providers.is_empty() {
             return Err(QError::NoProvider(request.model.clone()));
         }
+        let mut working = request.clone();
+        if let Some(prompt) = &working.system_prompt {
+            working.messages.insert(0, q_core::Message {
+                role: Role::System,
+                content: prompt.clone(),
+                name: None,
+                tool_call_id: None,
+                tool_calls: None,
+            });
+        }
+        working.system_prompt = None;
         let mut last_error = None;
         for provider in providers {
-            match provider.stream(request).await {
+            match provider.stream(&working).await {
                 Ok(stream) => return Ok(stream),
                 Err(error) => {
                     eprintln!(
