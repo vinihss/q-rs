@@ -70,8 +70,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if input == "/quit" || input == "/exit" {
             break;
         }
+        if let Some(rest) = input.strip_prefix("/system ") {
+            // store in env for session
+            env::set_var("Q_RS_SYSTEM_PROMPT", rest.trim());
+            println!("system prompt definido.");
+            continue;
+        }
+        if input == "/system" {
+            println!("system prompt: {}", env::var("Q_RS_SYSTEM_PROMPT").unwrap_or_default());
+            continue;
+        }
         let model = env_or("Q_RS_DEFAULT_MODEL", "default");
-        let request = ChatRequest::new(model, vec![Message::user(input)]);
+        let mut request = ChatRequest::new(model, vec![Message::user(input)]);
+        if let Ok(sp) = env::var("Q_RS_SYSTEM_PROMPT") {
+            if !sp.trim().is_empty() {
+                request.system_prompt = Some(sp);
+            }
+        }
         match chat.complete(&request).await {
             Ok(answer) => println!("assistant> {}", answer.content),
             Err(error) => eprintln!("erro: {error}"),
