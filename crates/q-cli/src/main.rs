@@ -57,6 +57,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // Modo direto: q-rs "pergunta" (ou via Q_RS_PROMPT)
     let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && (args[1] == "-h" || args[1] == "--help" || args[1] == "help") {
+        println!("q-rs — assistente de chat");
+        println!();
+        println!("Uso:");
+        println!("  q-rs                     modo interativo");
+        println!("  q-rs \"pergunta\"          modo direto (one-shot)");
+        println!();
+        println!("Variáveis de ambiente:");
+        println!("  Q_RS_SYSTEM_PROMPT        system prompt aplicado a todas as requisições");
+        println!("  Q_RS_DEFAULT_MODEL        modelo padrão (default)");
+        println!("  Q_RS_DEFAULT_PROVIDER     provedor padrão (demo)");
+        println!("  GROQ_API_KEY / OPENROUTER_API_KEY");
+        println!();
+        println!("Comandos interativos: /system <texto>, /system, /quit, /exit");
+        return Ok(());
+    }
     if args.len() > 1 {
         let input = args[1..].join(" ");
         let model = env_or("Q_RS_DEFAULT_MODEL", "default");
