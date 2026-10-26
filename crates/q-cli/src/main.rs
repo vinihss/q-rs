@@ -55,6 +55,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         q_server::run(chat, &host, port).await?;
         return Ok(());
     }
+    // Modo direto: q-rs "pergunta" (ou via Q_RS_PROMPT)
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        let input = args[1..].join(" ");
+        let model = env_or("Q_RS_DEFAULT_MODEL", "default");
+        let mut request = ChatRequest::new(model, vec![Message::user(input)]);
+        if let Ok(sp) = env::var("Q_RS_SYSTEM_PROMPT") {
+            if !sp.trim().is_empty() { request.system_prompt = Some(sp); }
+        }
+        match chat.complete(&request).await {
+            Ok(answer) => { println!("{}", answer.content); }
+            Err(error) => { eprintln!("erro: {error}"); }
+        }
+        return Ok(());
+    }
     println!("q-rs — modo CLI (provedor demo disponível; Ctrl+D para sair)");
     loop {
         print!("you> ");
