@@ -64,13 +64,16 @@ impl ChatService {
         // append each result as a tool message, then ask the model to continue.
         let mut working = request.clone();
         if let Some(prompt) = &working.system_prompt {
-            working.messages.insert(0, q_core::Message {
-                role: Role::System,
-                content: prompt.clone(),
-                name: None,
-                tool_call_id: None,
-                tool_calls: None,
-            });
+            working.messages.insert(
+                0,
+                q_core::Message {
+                    role: Role::System,
+                    content: prompt.clone(),
+                    name: None,
+                    tool_call_id: None,
+                    tool_calls: None,
+                },
+            );
         }
         working.system_prompt = None;
         working.tools = self.tools.as_ref().map(|executor| executor.definitions());
@@ -154,13 +157,16 @@ impl ChatService {
         }
         let mut working = request.clone();
         if let Some(prompt) = &working.system_prompt {
-            working.messages.insert(0, q_core::Message {
-                role: Role::System,
-                content: prompt.clone(),
-                name: None,
-                tool_call_id: None,
-                tool_calls: None,
-            });
+            working.messages.insert(
+                0,
+                q_core::Message {
+                    role: Role::System,
+                    content: prompt.clone(),
+                    name: None,
+                    tool_call_id: None,
+                    tool_calls: None,
+                },
+            );
         }
         working.system_prompt = None;
         let mut last_error = None;

@@ -596,6 +596,7 @@ dependencies = [
  "futures-util",
  "q-core",
  "q-tools",
+ "serde_json",
  "tokio",
 ]
 

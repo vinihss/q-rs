@@ -51,17 +51,34 @@ cargo check --workspace
 cargo test --workspace
 ```
 
-Modo CLI local (não chama um LLM por padrão):
+Instalação (binário no PATH do usuário + configuração em `~/.config/q-rs`):
 
 ```bash
-cargo run -p q-cli
+bash install.sh                  # compila, instala em ~/.local/bin, pergunta a porta do daemon
+bash install.sh --port 8787      # sem prompt
+bash install.sh --no-daemon      # só binário e config
 ```
 
-Servidor HTTP local:
+Uso do CLI (não chama um LLM por padrão — usa o provider `demo`):
 
 ```bash
-Q_RS_MODE=server cargo run -p q-cli
+q-rs run "quanto é 2+2?"                  # one-shot
+q-rs --prompt "responda em uma palavra" run "oi"
+q-rs                                      # modo interativo (REPL)
+q-rs --help
 ```
+
+Servidor HTTP (bind `0.0.0.0:8787` por padrão, acessível na rede):
+
+```bash
+q-rs server install --port 8787   # grava ~/.config/q-rs/config + unit systemd de usuário
+q-rs server start                 # sobe em background (PID em ~/.config/q-rs/server.pid)
+q-rs server status                # exit 0 = rodando
+q-rs server stop
+q-rs server run --port 9000       # foreground (debug)
+```
+
+`cargo run -p q-cli -- run "..."` funciona igual durante o desenvolvimento.
 
 Rotas disponíveis:
 
@@ -71,12 +88,12 @@ Rotas disponíveis:
 - `POST /v1/chat/completions` com `{"model":"default","messages":[{"role":"user","content":"Olá"}]}`
 - `POST /v1/chat/completions` com `"stream":true` para receber eventos SSE. O provider selecionado precisa implementar `stream`; `demo` implementa, os adapters remotos ainda retornam `UnsupportedOperation`.
 
-Para usar endpoints OpenAI-compatible, configure `GROQ_API_KEY` ou `OPENROUTER_API_KEY`. Variáveis opcionais estão em `.env.example`; o binário não carrega `.env` automaticamente, então exporte-as no shell ou use um gerenciador de ambiente.
+Para usar endpoints OpenAI-compatible, configure `GROQ_API_KEY` ou `OPENROUTER_API_KEY` em `~/.config/q-rs/env` (ou no ambiente do shell). O CLI carrega `~/.config/q-rs/env` e `~/.config/q-rs/config` na inicialização; variáveis já presentes no ambiente têm prioridade. Diretório alternativo: `Q_RS_CONFIG_DIR` ou `$XDG_CONFIG_HOME/q-rs`.
 
 Exemplo de request:
 
 ```bash
-curl http://127.0.0.1:8080/v1/chat/completions \
+curl http://127.0.0.1:8787/v1/chat/completions \
   -H 'content-type: application/json' \
   -d '{"model":"default","messages":[{"role":"user","content":"Olá"}]}'
 ```

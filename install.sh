@@ -1,57 +1,159 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# q-rs — Instalação e setup rápido
+# q-rs — instalação
 # ==============================================================================
-# Este script instala o q-rs, configura o serviço systemd e cria atalhos.
-# Execute como: bash install.sh   (ou ./install.sh após chmod +x)
+# Instala o binário `q-rs` no PATH do usuário, cria as configurações em
+# ~/.config/q-rs (ou $XDG_CONFIG_HOME/q-rs) e, opcionalmente, registra o
+# servidor como daemon systemd de usuário (perguntando a porta).
+#
+# Uso:
+#   bash install.sh [--prefix DIR] [--port N] [--no-daemon] [--rebuild]
 # ==============================================================================
 
 set -euo pipefail
 
-Q_USER="vinicius"
-Q_HOME="/home/${Q_USER}"
-Q_PROJECT="${Q_HOME}/q-rs"
-Q_BIN="${Q_HOME}/.local/bin"
-Q_SKILLS="${Q_HOME}/.config/q/skills"
-Q_CONF="${Q_HOME}/.config/q"
-Q_SYSTEMD="${Q_HOME}/.config/systemd/user"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "=== q-rs: Instalação ==="
+Q_PREFIX="${Q_PREFIX:-${HOME}/.local}"
+Q_CONFIG_DIR="${Q_RS_CONFIG_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/q-rs}"
+Q_LEGACY_DIR="${HOME}/.config/q"
+Q_PORT=""
+WITH_DAEMON=1
+REBUILD=0
 
-# 1. Verificar se já está instalado
-if [ -x "${Q_BIN}/q-rs" ]; then
-    echo "✅ q-rs já está instalado em ${Q_BIN}/q-rs"
-    BINARY_EXISTS=true
-else
-    BINARY_EXISTS=false
+usage() {
+    cat <<'EOF'
+q-rs — instalação
+
+Uso: bash install.sh [opções]
+
+Opções:
+  --prefix DIR    instala o binário em DIR/bin (padrão: ~/.local)
+  --port N        porta do servidor (sem a opção, o CLI pergunta)
+  --no-daemon     não registra/inicia o servidor como daemon
+  --rebuild       recompila e reinstala o binário mesmo se já existir
+  -h, --help      esta ajuda
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --prefix)
+            [ "$#" -ge 2 ] || { echo "erro: --prefix exige um diretório" >&2; exit 2; }
+            Q_PREFIX="$2"
+            shift 2
+            ;;
+        --prefix=*)
+            Q_PREFIX="${1#*=}"
+            shift
+            ;;
+        --port)
+            [ "$#" -ge 2 ] || { echo "erro: --port exige um número" >&2; exit 2; }
+            Q_PORT="$2"
+            shift 2
+            ;;
+        --port=*)
+            Q_PORT="${1#*=}"
+            shift
+            ;;
+        --no-daemon)
+            WITH_DAEMON=0
+            shift
+            ;;
+        --rebuild)
+            REBUILD=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "erro: opção desconhecida: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [ -n "${Q_PORT}" ]; then
+    case "${Q_PORT}" in
+        ''|*[!0-9]*) echo "erro: porta inválida: ${Q_PORT}" >&2; exit 2 ;;
+    esac
+    if [ "${Q_PORT}" -eq 0 ]; then
+        echo "erro: porta inválida: 0" >&2
+        exit 2
+    fi
 fi
 
-# 2. Criar diretórios necessários
-echo "📁 Criando diretórios..."
-mkdir -p "${Q_BIN}"
-mkdir -p "${Q_SKILLS}"
-mkdir -p "${Q_CONF}"
-mkdir -p "${Q_SYSTEMD}"
+Q_BIN_DIR="${Q_PREFIX}/bin"
+Q_BINARY="${Q_BIN_DIR}/q-rs"
 
-# 3. Instalar binário (se não existir ou rebuild)
-if [ "${BINARY_EXISTS}" = false ]; then
-    echo "🔨 Construindo q-rs..."
-    cd "${Q_PROJECT}"
-    cargo build --release 2>&1 | tail -1
-    cp "${Q_PROJECT}/target/release/q-rs" "${Q_BIN}/q-rs"
-    chmod +x "${Q_BIN}/q-rs"
-    echo "✅ Binário instalado: ${Q_BIN}/q-rs"
+echo "=== q-rs: instalação ==="
+echo "📍 prefixo:    ${Q_PREFIX}"
+echo "📁 config:     ${Q_CONFIG_DIR}"
+
+# ------------------------------------------------------------------------------
+# 1. Binário
+# ------------------------------------------------------------------------------
+mkdir -p "${Q_BIN_DIR}"
+
+if [ -x "${Q_BINARY}" ] && [ "${REBUILD}" -eq 0 ]; then
+    echo "✅ binário já instalado: ${Q_BINARY} (use --rebuild para recompilar)"
 else
-    echo "✅ Binário já existe"
+    if ! command -v cargo >/dev/null 2>&1; then
+        echo "erro: cargo não encontrado no PATH; instale o toolchain Rust" >&2
+        exit 1
+    fi
+    echo "🔨 compilando (cargo build --release -p q-cli)..."
+    ( cd "${SCRIPT_DIR}" && cargo build --release -p q-cli )
+    install -m 0755 "${SCRIPT_DIR}/target/release/q-rs" "${Q_BINARY}"
+    echo "✅ binário instalado: ${Q_BINARY}"
 fi
 
-# 4. Instalar skills (se não existirem)
-echo "🛠️  Instalando skills..."
+# ------------------------------------------------------------------------------
+# 2. Configuração em ~/.config/q-rs
+# ------------------------------------------------------------------------------
+mkdir -p "${Q_CONFIG_DIR}/skills"
+
+if [ -f "${Q_LEGACY_DIR}/env" ] && [ ! -f "${Q_CONFIG_DIR}/env" ]; then
+    cp "${Q_LEGACY_DIR}/env" "${Q_CONFIG_DIR}/env"
+    chmod 600 "${Q_CONFIG_DIR}/env"
+    echo "↪️  chaves migradas de ${Q_LEGACY_DIR}/env"
+fi
+
+if [ -d "${Q_LEGACY_DIR}/skills" ] && [ -z "$(find "${Q_CONFIG_DIR}/skills" -name '*.md' -print -quit 2>/dev/null)" ]; then
+    cp -n "${Q_LEGACY_DIR}"/skills/*.md "${Q_CONFIG_DIR}/skills/" 2>/dev/null || true
+    echo "↪️  skills migradas de ${Q_LEGACY_DIR}/skills"
+fi
+
+if [ ! -f "${Q_CONFIG_DIR}/env" ]; then
+    umask 077
+    cat > "${Q_CONFIG_DIR}/env" << 'EOF'
+# Chaves de API do q-rs — variáveis de ambiente reais têm prioridade.
+# GROQ_API_KEY=
+# OPENROUTER_API_KEY=
+EOF
+    chmod 600 "${Q_CONFIG_DIR}/env"
+    echo "✅ criado ${Q_CONFIG_DIR}/env (adicione suas chaves)"
+else
+    chmod 600 "${Q_CONFIG_DIR}/env" 2>/dev/null || true
+    echo "✅ mantido ${Q_CONFIG_DIR}/env existente"
+fi
+
+# ------------------------------------------------------------------------------
+# 3. Skills
+# ------------------------------------------------------------------------------
+echo "🛠️  instalando skills..."
 for skill in tradutor resumir corretor revisor traduzir auxiliar; do
-    if [ ! -f "${Q_SKILLS}/${skill}.md" ]; then
-        case "${skill}" in
-            tradutor)
-                cat > "${Q_SKILLS}/${skill}.md" << 'EOF'
+    target="${Q_CONFIG_DIR}/skills/${skill}.md"
+    if [ -f "${target}" ]; then
+        echo "✅ skill '${skill}' já existe"
+        continue
+    fi
+    case "${skill}" in
+        tradutor)
+            cat > "${target}" << 'EOF'
 # Tradutor
 
 Traduza o texto de entrada de forma direta, em português.
@@ -60,9 +162,9 @@ Traduza o texto de entrada de forma direta, em português.
 - Responda apenas com o texto traduzido.
 - Mantenha formatação markdown se o input a utilizar.
 EOF
-                ;;
-            resumir)
-                cat > "${Q_SKILLS}/${skill}.md" << 'EOF'
+            ;;
+        resumir)
+            cat > "${target}" << 'EOF'
 # Resumificador
 
 Resuma o texto de entrada de forma clara e direta, em português.
@@ -72,9 +174,9 @@ Resuma o texto de entrada de forma clara e direta, em português.
 - Use tópicos quando possível para melhor leitura.
 - Mantenha o significado original, não adicione opiniões pessoais.
 EOF
-                ;;
-            corretor)
-                cat > "${Q_SKILLS}/${skill}.md" << 'EOF'
+            ;;
+        corretor)
+            cat > "${target}" << 'EOF'
 # Corretor de Gramática
 
 Corrige gramática e melhora a fluência de textos em português.
@@ -84,9 +186,9 @@ Corrige gramática e melhora a fluência de textos em português.
 - Mantenha o tom formal ou informal conforme o texto de entrada.
 - Responda APENAS com o texto corrigido, sem explicações desnecessárias.
 EOF
-                ;;
-            revisor)
-                cat > "${Q_SKILLS}/${skill}.md" << 'EOF'
+            ;;
+        revisor)
+            cat > "${target}" << 'EOF'
 # Revisor de Código
 
 Revisa código em busca de melhorias, bugs e boas práticas.
@@ -97,9 +199,9 @@ Revisa código em busca de melhorias, bugs e boas práticas.
 - Priorize mudanças que tenham impacto medível (performance, legibilidade).
 - Responda em português, mantendo o estilo do código original quando sugerir mudanças.
 EOF
-                ;;
-            traduzir)
-                cat > "${Q_SKILLS}/${skill}.md" << 'EOF'
+            ;;
+        traduzir)
+            cat > "${target}" << 'EOF'
 # Tradutor Bilíngue
 
 Tradução entre português e inglês, preservando o significado e o tom.
@@ -109,9 +211,9 @@ Tradução entre português e inglês, preservando o significado e o tom.
 - Para textos técnicos, preserve termos em inglês entre aspas ou itálico.
 - Responda com o texto original + tradução separada por "|||".
 EOF
-                ;;
-            auxiliar)
-                cat > "${Q_SKILLS}/${skill}.md" << 'EOF'
+            ;;
+        auxiliar)
+            cat > "${target}" << 'EOF'
 # Assistente de Tarefas
 
 Ajuda com tarefas cotidianas, brainstorming e organização.
@@ -121,80 +223,68 @@ Ajuda com tarefas cotidianas, brainstorming e organização.
 - Use tópicos para melhor legibilidade.
 - Se solicitado, gere listas de verificação ou modelos.
 EOF
-                ;;
+            ;;
+    esac
+    echo "✅ skill '${skill}' criada"
+done
+
+# ------------------------------------------------------------------------------
+# 4. PATH
+# ------------------------------------------------------------------------------
+case ":${PATH}:" in
+    *":${Q_BIN_DIR}:"*) ;;
+    *)
+        echo "⚠️  ${Q_BIN_DIR} não está no PATH. Adicione ao seu shell:"
+        echo "    export PATH=\"${Q_BIN_DIR}:\$PATH\""
+        ;;
+esac
+
+# ------------------------------------------------------------------------------
+# 5. Daemon (systemd de usuário, via CLI)
+# ------------------------------------------------------------------------------
+if [ "${WITH_DAEMON}" -eq 1 ]; then
+    echo "⚙️  configurando servidor (daemon)..."
+    daemon_args=(server install)
+    if [ -n "${Q_PORT}" ]; then
+        daemon_args+=(--port "${Q_PORT}")
+    fi
+    if ! Q_RS_CONFIG_DIR="${Q_CONFIG_DIR}" "${Q_BINARY}" "${daemon_args[@]}"; then
+        echo "⚠️  não foi possível registrar o daemon; o binário está instalado." >&2
+        echo "    Rode manualmente: ${Q_BINARY} server install" >&2
+    fi
+else
+    echo "⏭️  daemon ignorado (--no-daemon); use 'q-rs server install' depois"
+fi
+
+# ------------------------------------------------------------------------------
+# 6. Resumo
+# ------------------------------------------------------------------------------
+Q_HOST="0.0.0.0"
+Q_SERVER_PORT="${Q_PORT:-8787}"
+if [ -f "${Q_CONFIG_DIR}/config" ]; then
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            Q_RS_HOST) Q_HOST="${value}" ;;
+            Q_RS_PORT) Q_SERVER_PORT="${value}" ;;
         esac
-        echo "✅ Skill '${skill}' criada"
-    else
-        echo "✅ Skill '${skill}' já existe"
-    fi
-done
-
-# 5. Configurar systemd user service
-echo "⚙️  Configurando systemd service..."
-
-# Verificar se o serviço já está configurado
-if [ ! -f "${Q_SYSTEMD}/q-rs-serve.service" ]; then
-    cat > "${Q_SYSTEMD}/q-rs-serve.service" << EOF
-[Unit]
-Description=q-rs serve — pergunta rápida (Groq/OpenRouter com fallback)
-After=network-online.target
-
-[Service]
-Type=simple
-ExecStart=${Q_BIN}/q-rs serve --port 8787
-EnvironmentFile=${Q_CONF}/env
-Restart=on-failure
-RestartSec=2
-
-[Install]
-WantedBy=default.target
-EOF
-    echo "✅ Service file criado: ${Q_SYSTEMD}/q-rs-serve.service"
-else
-    echo "✅ Service file já existe"
+    done < "${Q_CONFIG_DIR}/config"
 fi
 
-# 6. Habilitar service no boot
-echo "🚀 Habilitando service no boot..."
-systemctl --user daemon-reload 2>/dev/null || echo "   (systemctl --user não disponível neste ambiente)"
-systemctl --user enable --now q-rs-serve.service 2>/dev/null || echo "   (iniciando service manualmente)"
-
-# 6. Verificar ambiente de chaves
-echo "🔑 Verificando ambiente de chaves..."
-if [ -f "${Q_CONF}/env" ]; then
-    echo "   ✅ Arquivo de chaves existe: ${Q_CONF}/env"
-    # Exportar variáveis de ambiente do arquivo env
-    set -a
-    source "${Q_CONF}/env"
-    set +a
-    head -2 "${Q_CONF}/env" 2>/dev/null || echo "   (arquivo vazio)"
-else
-    echo "⚠️  Arquivo de chaves não encontrado: ${Q_CONF}/env"
-    echo "   Crie este arquivo com:"
-    echo "   GROQ_API_KEY='sua-chave-groq'"
-    echo "   OPENROUTER_API_KEY='sua-chave-openrouter'"
-fi
-
-# 7. Resumo final
 echo ""
-echo "=== q-rs: Instalação Concluída ==="
+echo "=== q-rs: instalação concluída ==="
 echo ""
-echo "📍 Binário:        ${Q_BIN}/q-rs"
-echo "📁 Skills:         ${Q_SKILLS}/"
-echo "🌐 Servidor:       http://127.0.0.1:8787 (ou IP do Tailscale)"
-echo "📦 Skills disponíveis:"
-for s in tradutor resumir corretor revisor traduzir auxiliar; do
-    if [ -f "${Q_SKILLS}/${s}.md" ]; then
-        echo "   - ${s}"
-    fi
-done
+echo "📍 binário:     ${Q_BINARY}"
+echo "📁 config:      ${Q_CONFIG_DIR}"
+echo "🔑 chaves:      ${Q_CONFIG_DIR}/env"
+echo "🧩 skills:      ${Q_CONFIG_DIR}/skills/"
+echo "🌐 servidor:    http://${Q_HOST}:${Q_SERVER_PORT} (bind ${Q_HOST} — acessível na rede)"
+echo "📝 log:         ${Q_CONFIG_DIR}/server.log"
 echo ""
-echo "📦 Comandos úteis:"
-echo "   q-rs <pergunta>                     # Pergunta direta"
-echo "   q-rs -s tradutor \"texto\"              # Usar skill"
-echo "   q-rs tool shell \"comando\"             # Executar tool shell"
-echo "   q-rs skills                           # Listar skills"
-echo "   systemctl --user status q-rs-serve  # Status do serviço"
+echo "📦 comandos úteis:"
+echo "   q-rs run \"<texto>\"                      # pergunta direta"
+echo "   q-rs --prompt \"<system>\" run \"<texto>\"   # com system prompt"
+echo "   q-rs                                    # modo interativo"
+echo "   q-rs server start|stop|status           # daemon"
+echo "   q-rs --help                             # ajuda completa"
 echo ""
-echo "=== Pronto! ==="
-
+echo "=== pronto! ==="
