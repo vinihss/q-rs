@@ -1,6 +1,6 @@
 #!/bin/bash
 # Bash puro: chama q-rs API e retorna só texto (sem JSON)
-HOST="http://localhost:8787"
+HOST="http://avalon:8787"
 QUERY="$1"
 
 echo "--- /v1/ask ---"
