@@ -1,9 +1,11 @@
 #!/bin/bash
 # Bash puro: chama q-rs API e retorna só texto (sem JSON)
-HOST="http://avalon:8787"
+HOST="http://localhost:8787"
 QUERY="$1"
 
-
-curl -s -X POST "$HOST/v1/chat/completions" \
+echo "--- /v1/ask ---"
+curl -s -X POST "$HOST/v1/ask" \
   -H "Content-Type: application/json" \
-  -d "{\"model\":\"default\",\"messages\":[{\"role\":\"user\",\"content\":\"$QUERY\"}]}" | jq -r '.choices[0].message.content // empty'
+  -d "{\"q\":\"$QUERY\"}" | jq -r '.answer // empty'
+
+
