@@ -10,11 +10,11 @@ use crate::StaticProviderRegistry;
 const DEFAULT_MAX_TOOL_ROUNDS: usize = 8;
 
 pub struct ChatService {
-    registry: Arc<dyn ProviderRegistry>,
-    default_provider: Option<String>,
-    default_model: String,
-    tools: Option<Arc<dyn ToolExecutor>>,
-    max_tool_rounds: usize,
+    pub(crate) registry: Arc<dyn ProviderRegistry>,
+    pub(crate) default_provider: Option<String>,
+    pub(crate) default_model: String,
+    pub(crate) tools: Option<Arc<dyn ToolExecutor>>,
+    pub(crate) max_tool_rounds: usize,
 }
 
 impl ChatService {
@@ -50,6 +50,10 @@ impl ChatService {
 
     pub fn default_model(&self) -> &str {
         &self.default_model
+    }
+
+    pub fn tools(&self) -> Option<Arc<dyn ToolExecutor>> {
+        self.tools.clone()
     }
 
     /// Enables automatic tool execution. Only tools registered in this executor are exposed
@@ -116,47 +120,17 @@ impl ChatService {
             }
             rounds += 1;
 
-            // Keep the assistant tool-call turn in the transcript before tool results.
-            let mut assistant_message = q_core::Message::assistant(response.content.clone());
-            assistant_message.tool_calls = Some(response.tool_calls.clone());
-            working.messages.push(assistant_message);
-
-            for call in response.tool_calls {
-                let output = match executor.execute(&call.name, call.arguments.clone()).await {
-                    Ok(output) => output.content,
-                    Err(error) => format!("Erro ao executar ferramenta '{}': {}", call.name, error),
-                };
-                working.messages.push(q_core::Message {
-                    role: Role::Tool,
-                    content: output,
-                    name: Some(call.name),
-                    tool_call_id: Some(call.id),
-                    tool_calls: None,
-                });
-            }
+            self.append_tool_results(
+                &mut working,
+                response.content.clone(),
+                response.tool_calls.clone(),
+                executor,
+            )
+            .await?;
         }
     }
 
-    async fn complete_with_fallback(
-        &self,
-        providers: &[Arc<dyn ChatProvider>],
-        request: &ChatRequest,
-    ) -> Result<ChatResponse> {
-        let mut last_error = None;
-        for provider in providers {
-            match provider.complete(request).await {
-                Ok(response) => return Ok(response),
-                Err(error) => {
-                    eprintln!("q-rs: provider {} failed: {}", provider.name(), error);
-                    last_error = Some(error);
-                }
-            }
-        }
-        match last_error {
-            Some(_) => Err(QError::AllProvidersFailed),
-            None => Err(QError::NoProvider(request.model.clone())),
-        }
-    }
+    // complete_with_fallback moved to chat::fallback
 
     /// Streaming currently forwards provider events. Automatic tool execution is implemented
     /// for non-streaming completions; providers need structured tool-call stream events before
@@ -201,26 +175,7 @@ impl ChatService {
         }
     }
 
-    fn candidates(&self, model: &str) -> Vec<Arc<dyn ChatProvider>> {
-        let mut providers = self.registry.providers();
-        if let Some((prefix, _)) = model.split_once('/') {
-            providers.retain(|p| p.name() == prefix);
-        } else if model == "default" {
-            if let Some(default) = &self.default_provider {
-                providers.sort_by_key(|p| if p.name() == default { 0 } else { 1 });
-            }
-        } else {
-            let matching: Vec<_> = providers
-                .iter()
-                .filter(|p| p.name() == model)
-                .cloned()
-                .collect();
-            if !matching.is_empty() {
-                return matching;
-            }
-        }
-        providers
-    }
+    // candidates moved to chat::fallback
 }
 
 #[cfg(test)]
