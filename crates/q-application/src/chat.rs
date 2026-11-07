@@ -12,6 +12,7 @@ const DEFAULT_MAX_TOOL_ROUNDS: usize = 8;
 pub struct ChatService {
     registry: Arc<dyn ProviderRegistry>,
     default_provider: Option<String>,
+    default_model: String,
     tools: Option<Arc<dyn ToolExecutor>>,
     max_tool_rounds: usize,
 }
@@ -21,6 +22,7 @@ impl ChatService {
         Self {
             registry: Arc::new(StaticProviderRegistry::new(providers)),
             default_provider: None,
+            default_model: "default".into(),
             tools: None,
             max_tool_rounds: DEFAULT_MAX_TOOL_ROUNDS,
         }
@@ -30,6 +32,7 @@ impl ChatService {
         Self {
             registry,
             default_provider: None,
+            default_model: "default".into(),
             tools: None,
             max_tool_rounds: DEFAULT_MAX_TOOL_ROUNDS,
         }
@@ -38,6 +41,15 @@ impl ChatService {
     pub fn with_default_provider(mut self, name: impl Into<String>) -> Self {
         self.default_provider = Some(name.into());
         self
+    }
+
+    pub fn with_default_model(mut self, model: impl Into<String>) -> Self {
+        self.default_model = model.into();
+        self
+    }
+
+    pub fn default_model(&self) -> &str {
+        &self.default_model
     }
 
     /// Enables automatic tool execution. Only tools registered in this executor are exposed

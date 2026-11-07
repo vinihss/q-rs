@@ -36,7 +36,12 @@ pub async fn ask(State(state): State<AppState>, Json(body): Json<AskRequest>) ->
         )
             .into_response();
     }
-    let mut request = ChatRequest::new(body.model, vec![Message::user(body.q)]);
+    let model = if body.model == "default" {
+        state.chat.default_model().to_string()
+    } else {
+        body.model
+    };
+    let mut request = ChatRequest::new(model, vec![Message::user(body.q)]);
     request.system_prompt = body.system_prompt;
     match state.chat.complete(&request).await {
         Ok(answer) => Json(json!({"model":answer.model,"answer":answer.content})).into_response(),
@@ -46,8 +51,11 @@ pub async fn ask(State(state): State<AppState>, Json(body): Json<AskRequest>) ->
 
 pub async fn chat_completions(
     State(state): State<AppState>,
-    Json(body): Json<ChatCompletionRequest>,
+    Json(mut body): Json<ChatCompletionRequest>,
 ) -> Response {
+    if body.model == "default" {
+        body.model = state.chat.default_model().to_string();
+    }
     let request: ChatRequest = body.into();
     if request.stream {
         return match state.chat.stream(&request).await {

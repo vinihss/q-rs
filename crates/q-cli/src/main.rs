@@ -2,7 +2,8 @@ use q_application::ChatService;
 use q_core::ChatProvider;
 use q_core::{ChatRequest, Message};
 use q_providers::{DemoProvider, OpenAiCompatibleProvider};
-use q_tools::{CalculatorTool, ToolRegistry};
+use q_core::Tool;
+use q_tools::{CalculatorTool, LuaTool, ShellTool, ToolRegistry, WebFetchTool, WebSearchTool};
 use std::{
     env, fs,
     io::{self, IsTerminal, Write},
@@ -299,8 +300,37 @@ fn build_chat(default_provider: &str) -> ChatService {
     tools
         .register(CalculatorTool)
         .expect("calculator tool registration must succeed");
+    tools
+        .register(ShellTool)
+        .expect("shell tool registration must succeed");
+    tools.register(WebFetchTool).expect("web_fetch registration must succeed");
+    tools.register(WebSearchTool).expect("web_search registration must succeed");
+
+    // Load dynamic Lua tools from ~/.config/q-rs/tools/*.lua
+    let tools_dir = std::env::var("HOME").map(|h| std::path::PathBuf::from(h).join(".config/q-rs/tools")).unwrap_or_default();
+    if tools_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&tools_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("lua") {
+                    match LuaTool::from_file(path.clone()) {
+                        Ok(tool) => {
+                            let name = tool.definition().name.clone();
+                            if tools.register(tool).is_ok() {
+                                eprintln!("loaded lua tool: {name}");
+                            }
+                        }
+                        Err(e) => eprintln!("failed to load lua tool {path:?}: {e}"),
+                    }
+                }
+            }
+        }
+    }
     ChatService::new(providers)
         .with_default_provider(default_provider)
+        .with_default_model(
+            env_non_empty("Q_RS_DEFAULT_MODEL").unwrap_or_else(|| "default".to_string()),
+        )
         .with_tools(Arc::new(tools))
         .with_max_tool_rounds(8)
 }
